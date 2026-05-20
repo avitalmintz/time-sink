@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .macos_contacts import build_contact_map as _build_macos_contact_map
+
 CHAT_DB = Path("~/Library/Messages/chat.db").expanduser()
 MAC_EPOCH_OFFSET = 978307200
 
@@ -87,25 +89,41 @@ def _normalize_phone_for_lookup(handle: str) -> str:
     return re.sub(r"\D", "", handle)
 
 
-def _resolve_name(handle: str, contact_map: dict[str, str]) -> str:
+def _resolve_name(handle: str, contact_map: dict[str, str],
+                  macos_map: dict[str, str]) -> str:
+    """Lookup order:
+      1. User's config.json `contacts` (explicit override)
+      2. macOS Address Book (auto-pulled)
+      3. Anonymized fallback
+    """
     if not handle:
         return "(unknown)"
-    # Try exact match first
+
+    # 1. Exact match in user config
     if handle in contact_map:
         return contact_map[handle]
-    # Then try digits-only match for phones
+
+    # User config + phone-digits match
     digits = _normalize_phone_for_lookup(handle)
     if digits:
         last10 = digits[-10:]
         for k, v in contact_map.items():
             if _normalize_phone_for_lookup(k)[-10:] == last10:
                 return v
-    # Email: lowercase compare
+        # 2. macOS contacts by phone
+        if last10 in macos_map:
+            return macos_map[last10]
+
+    # User config + email match
     if "@" in handle:
         low = handle.lower()
         for k, v in contact_map.items():
             if k.lower() == low:
                 return v
+        # 2. macOS contacts by email
+        if low in macos_map:
+            return macos_map[low]
+
     return _anonymize(handle)
 
 
@@ -132,11 +150,17 @@ def _query(db_path: Path, since: datetime, until: datetime,
         h = r["handle"] or "(unknown)"
         counts[h] += 1
 
+    # Build macOS contacts lookup once per call (small table; OK to rebuild)
+    try:
+        macos_map = _build_macos_contact_map()
+    except Exception:
+        macos_map = {}
+
     out: list[ContactBatch] = []
     for handle, c in counts.most_common():
         out.append(ContactBatch(
             handle=handle,
-            display_name=_resolve_name(handle, contact_map),
+            display_name=_resolve_name(handle, contact_map, macos_map),
             count=c,
         ))
     return out
