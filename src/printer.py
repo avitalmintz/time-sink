@@ -50,8 +50,14 @@ def print_receipt(ip: str, lines: list[str], qr_url: str | None = None,
                 p.set(align="left")
             except Exception as qr_err:
                 print(f"  [qr failed] {type(qr_err).__name__}: {qr_err}")
-        p.text("\n\n")
-        p.cut()
+        # The cutter blade sits ~8 lines above the print head. We feed
+        # plenty of blank paper before the cut so we don't slice the
+        # bottom of this receipt OR the top of whatever prints next.
+        p.text("\n" * 8)
+        try:
+            p.cut(feed=True, lines=4)  # 4 extra feed lines, then full cut
+        except TypeError:
+            p.cut()  # older python-escpos signature
         return True
     except Exception as e:
         print(f"  [printer send fail] {type(e).__name__}: {e}")

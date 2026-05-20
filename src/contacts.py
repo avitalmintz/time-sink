@@ -44,6 +44,25 @@ def _anonymize(handle: str) -> str:
     return handle[:8]
 
 
+def _is_real_person_handle(handle: str) -> bool:
+    """True if the handle looks like a phone number or email.
+
+    iMessage chat.db also exposes group-chat GUIDs and other non-person
+    identifiers via JOIN; we filter those out so the TEXTED section is
+    actually a list of people."""
+    if not handle:
+        return False
+    if "@" in handle:
+        # Email: must have a dot in the domain part
+        local, _, domain = handle.partition("@")
+        return bool(local) and "." in domain
+    # Phone: needs 7+ digits and not too many letters (group GUIDs are
+    # long alphanumerics; phones are mostly digits)
+    digits = re.sub(r"\D", "", handle)
+    letters = re.sub(r"[^a-zA-Z]", "", handle)
+    return len(digits) >= 7 and len(digits) >= len(letters)
+
+
 @dataclass
 class ContactBatch:
     handle: str           # raw phone/email
@@ -147,7 +166,9 @@ def _query(db_path: Path, since: datetime, until: datetime,
 
     counts: Counter[str] = Counter()
     for r in rows:
-        h = r["handle"] or "(unknown)"
+        h = r["handle"] or ""
+        if not _is_real_person_handle(h):
+            continue  # skip group-chat GUIDs and other non-person handles
         counts[h] += 1
 
     # Build macOS contacts lookup once per call (small table; OK to rebuild)
