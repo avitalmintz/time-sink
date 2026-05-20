@@ -1,0 +1,37 @@
+{
+  "data_paths": {
+    "chrome_history": "~/Library/Application Support/Google/Chrome/Default/History",
+    "clipboard_db": "~/Library/Application Support/Clipboard Manager/clipboard-history.db"
+  },
+  "printer": {
+    "ip": "192.168.0.150",
+    "port": 9100,
+    "width_chars": 48,
+    "width_px": 576,
+    "dpi": 203
+  },
+  "session": {
+    "min_duration_minutes": 5,
+    "min_gap_between_receipts_minutes": 30
+  },
+  "receipt": {
+    "title": "TIME SINK",
+    "subtitle": "session receipt",
+    "owner": "yourname"
+  },
+  "sarah_mode": {
+    "enabled": false,
+    "name": "FRIEND",
+    "phone": "(555) 555-5555",
+    "batch_size": 10
+  },
+  "log_server": {
+    "url": "https://your-time-sink-log.onrender.com",
+    "secret_env_var": "TIME_SINK_LOG_SECRET"
+  },
+  "redaction": {
+    "blocked_domains": [],
+    "blocked_keywords": [],
+    "max_search_chars": 40
+  }
+}

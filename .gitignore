@@ -1,0 +1,21 @@
+# --- personal config & secrets (NEVER commit these) ---
+config.json
+.time-sink.env
+
+# --- ephemeral data (per-machine, never useful to others) ---
+data/sessions.db
+data/sessions.db-*
+data/events.log
+data/sleephook.log
+data/menubar.log
+out/
+queue/
+
+# --- python / OS noise ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.DS_Store
+*.log
