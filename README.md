@@ -74,7 +74,7 @@ The companion repo is [time-sink-log](https://github.com/avitalmintz/time-sink-l
    read Chrome history for this session window
             │
             ▼
-   Claude API: one headline + one opportunity-cost line
+   Anthropic API: one headline + one opportunity-cost line
             │
             ▼
    render receipt text (48-char monospace)
@@ -89,7 +89,7 @@ The companion repo is [time-sink-log](https://github.com/avitalmintz/time-sink-l
    paper comes out with a real QR code
 ```
 
-When someone scans the QR code, they hit `time-sink-log.onrender.com/r/<id>`, which generates a personalized essay using Claude and serves an HTML page. From there they can navigate to `/` to see every receipt ever generated, tiled like a wall mural.
+When someone scans the QR code, they hit `time-sink-log.onrender.com/r/<id>`, which generates a personalized essay and serves an HTML page. From there they can navigate to `/` to see every receipt ever generated, tiled like a wall mural.
 
 ---
 
@@ -114,7 +114,7 @@ The companion server lives in a separate repo, deploys to Render's free tier, an
 
 This project intentionally exposes things about its maker (me) on a public webpage. But:
 
-- **Only outgoing messages** are read by Claude for the SARAH-mode receipts. My friend's words stay local.
+- **Only outgoing messages** are sent to the API for the SARAH-mode receipts. My friend's words stay local.
 - **`config.json` is gitignored** so phone numbers, names, and printer IPs aren't in the public repo.
 - **Anthropic doesn't train on API content** (per their terms).
 - **Search content is shown verbatim on receipts.** That's deliberate. The point of the piece is to confront the gap between what I think I do and what I actually do; sanitized data wouldn't.
