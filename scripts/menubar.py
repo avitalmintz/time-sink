@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO_ROOT))
 import rumps
 
 from src import config, sessions
+from src.app_logger import tick as log_app_tick, SAMPLE_INTERVAL_SEC
 from src.tracking_flag import activate, is_active, pause
 
 
@@ -34,6 +35,16 @@ class TimeSinkApp(rumps.App):
     def __init__(self):
         super().__init__(name="TS", quit_button=None)
         self._sync_title()
+        # Active-app polling — knowledgeC.db stopped working on Sonoma+,
+        # so we keep our own log.
+        self._app_timer = rumps.Timer(self._poll_active_app, SAMPLE_INTERVAL_SEC)
+        self._app_timer.start()
+
+    def _poll_active_app(self, _):
+        try:
+            log_app_tick()
+        except Exception as e:
+            print(f"[menubar] app log failed: {type(e).__name__}: {e}")
         # Build menu
         self.menu = [
             rumps.MenuItem("Activate tracking", callback=self.on_activate),
