@@ -126,13 +126,3 @@ The redaction layer (`redaction` block in `config.json`) exists for keywords or 
 ## Class context
 
 This is a class project. The intended audience is one class. The repo is public for portfolio/documentation purposes, not because the system is meant to be deployed by anyone else. It is unpolished by design.
-
----
-
-## Credit
-
-Built with help from Claude (Anthropic). The repo contains AI-generated text in two places:
-1. The headlines / opportunity-cost lines printed on each receipt (live API calls)
-2. The personalized essays served at `/r/<id>` (live API calls in the companion server)
-
-All other code is hand-written.
