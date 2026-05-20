@@ -61,6 +61,16 @@ def build_payload(session, agg, headline: str | None,
         "searches": agg.searches[:10],
         "longest_domain": agg.longest_domain[0] if agg.longest_domain else None,
         "longest_time_str": _hms(agg.longest_domain[1]) if agg.longest_domain else None,
+        "drift_str": _hms(getattr(agg, "drift_seconds", 0.0)),
+        "intent_str": _hms(getattr(agg, "intent_seconds", 0.0)),
+        "apps": [
+            (a.name, _hms(a.duration_seconds), a.kind)
+            for a in getattr(agg, "apps", [])[:10]
+        ],
+        "contacts": [
+            (c.display_name, c.count)
+            for c in getattr(agg, "contacts", [])[:10]
+        ],
     }
     if lines is not None:
         payload["lines"] = lines

@@ -86,3 +86,68 @@ def categorize(domain: str | None) -> str:
             if d == p or d.endswith("." + p):
                 return label
     return "OTHER"
+
+
+# ---- DRIFT / INTENT classification ----
+
+# Web categories
+DRIFT_WEB_CATEGORIES = {"SOCIAL", "MEDIA", "SHOPPING", "NEWS", "LIFE"}
+INTENT_WEB_CATEGORIES = {"SCHOOL", "WORK", "EMAIL", "AI"}
+# SEARCH and OTHER are intentionally neither — search is means-to-an-end,
+# and OTHER is unclassified.
+
+
+def web_category_kind(category: str) -> str:
+    """Return 'drift', 'intent', or 'neutral' for a web category label."""
+    if category in DRIFT_WEB_CATEGORIES:
+        return "drift"
+    if category in INTENT_WEB_CATEGORIES:
+        return "intent"
+    return "neutral"
+
+
+# Native apps (Mac apps via knowledgeC.db). Browsers are intentionally
+# NEUTRAL here — their time is already broken out into web categories
+# above, and counting them again would double-count.
+DRIFT_APPS = {
+    "com.spotify.client", "com.apple.Music",
+    "com.apple.iChat", "com.apple.MobileSMS", "com.apple.MessagesViewService",
+    "com.hnc.Discord",
+    "com.facebook.archon", "com.facebook.archon.developerID",
+    "com.tinyspeck.slackmacgap",  # debatable — leans social-distraction
+    "com.tdesktop", "ru.keepcoder.Telegram",
+    "com.openai.chat", "claude.app", "com.anthropic.claudefordesktop",
+    "com.todesktop.230313mzl4w4u92",  # Claude
+}
+INTENT_APPS = {
+    "com.apple.Notes", "com.apple.Pages", "com.apple.Numbers",
+    "com.apple.Keynote",
+    "com.apple.iCal",
+    "com.apple.Preview",
+    "com.apple.Terminal", "com.googlecode.iterm2",
+    "com.microsoft.VSCode",
+    "com.figma.Desktop",
+    "notion.id", "com.linear",
+    "com.zoom.xos", "us.zoom.xos",
+    "com.apple.mail",
+}
+NEUTRAL_APPS = {
+    # Browsers — web data already categorized above
+    "com.google.Chrome", "com.apple.Safari", "org.mozilla.firefox",
+    "company.thebrowser.Browser", "company.thebrowser.dia",
+    # Background / system
+    "com.apple.finder", "com.apple.systempreferences",
+    "com.apple.Photos",
+}
+
+
+def app_kind(bundle_id: str) -> str:
+    """Return 'drift', 'intent', or 'neutral' for a macOS bundle ID."""
+    if bundle_id in DRIFT_APPS:
+        return "drift"
+    if bundle_id in INTENT_APPS:
+        return "intent"
+    if bundle_id in NEUTRAL_APPS:
+        return "neutral"
+    # Unknown apps default to neutral — never accuse a stranger of waste
+    return "neutral"

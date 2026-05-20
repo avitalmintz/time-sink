@@ -16,14 +16,16 @@ import random
 import urllib.error
 import urllib.request
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .categorize import CATEGORIES_ORDERED, categorize
+from .categorize import (
+    CATEGORIES_ORDERED, categorize, web_category_kind, app_kind,
+)
 from .readers import Visit, extract_google_query
 from .sessions import Session
 
@@ -207,33 +209,41 @@ def generate_receipt_lines(agg: "Aggregated", duration: timedelta,
     )
     mins = int(duration.total_seconds() // 60)
 
-    prompt = f"""You're writing two short lines for a thermal-printer receipt that documents a browser session. Tone: wry, observational, honest. Not preachy. Not cringe.
+    drift_min = int(getattr(agg, "drift_seconds", 0) // 60)
+    intent_min = int(getattr(agg, "intent_seconds", 0) // 60)
+    apps_text = ", ".join(
+        f"{a.name} {int(a.duration_seconds // 60)}m"
+        for a in getattr(agg, "apps", [])[:6]
+    ) or "(none captured)"
+
+    prompt = f"""You write two short lines for a thermal-printer receipt about one browser/computer session. Tone: HONESTLY OBSERVATIONAL. Pointed about the actual patterns in the data. Not preachy. Not cringe. Not cruel. The voice of someone who reads the data and names what's there — including the gap between what the user might say they did and what the data shows.
 
 Return BOTH lines as a JSON object: {{"headline": "...", "opportunity": "..."}}
 
-HEADLINE — a one-line summary of what this session was. Under 60 chars. Lowercase. No period. No quotes inside the string. Should feel specific to the actual content, not generic.
-Examples:
+HEADLINE — one line summarizing what this session WAS, with specificity. Lowercase. Under 60 chars. No period. No quotes inside the string. Call out specific patterns: things that dominated, contradictions, the actual subject. Avoid generic ("a productive session"). Embrace honest framing of drift when the data shows it.
+Examples (calibration):
   - eleven minutes of wifi troubleshooting disguised as productivity
-  - a workday with a detour through casa de campo's spa page
-  - the kind of evening you don't tell people about
+  - three hours of looking at apartments you can't afford
+  - the matcha question, asked four ways, never answered
   - instagram, with breaks for instagram
-  - a slack-shaped tuesday
+  - a slack-shaped tuesday that mostly was hbo max
 
-OPPORTUNITY — one activity that takes ABOUT {mins} minutes that the user could have done instead of this session. Lowercase. Under 55 chars. Start with a past-tense verb (called, walked, read, cooked, etc.). Be specific and concrete. May optionally reference what they were doing in the session for a sharper contrast (e.g., if they spent it shopping, suggest something non-consumption).
-Examples (with their durations for calibration):
-  - drunk a glass of water (2 min)
+OPPORTUNITY — one specific activity that takes ABOUT {mins} minutes that the user could have done instead. Lowercase. Under 55 chars. Start with a past-tense verb. Be specific. When DRIFT >> INTENT in the data, lean into the opportunity that contrasts with what they were drifting on (e.g., if they were shopping, suggest something non-consumption; if scrolling, suggest something solitary).
+Examples:
   - made an espresso (5 min)
   - called your mom (12 min)
   - read 30 pages (30 min)
   - watched a sitcom (60 min)
   - watched the godfather (180 min)
-  - flown to new york (5 hours)
 
 Session data:
-  duration: {mins} minutes
-  top sites: {sites}
-  searches: {searches}
-  categories: {cats}
+  duration:    {mins} minutes
+  drift:       {drift_min} min
+  intent:      {intent_min} min
+  top sites:   {sites}
+  searches:    {searches}
+  categories:  {cats}
+  apps used:   {apps_text}
 
 Output ONLY the JSON object. No preamble, no markdown fence."""
 
@@ -292,18 +302,39 @@ class TopPage:
 
 
 @dataclass
+class AppRecord:
+    bundle_id: str
+    name: str
+    duration_seconds: float
+    kind: str   # 'drift' / 'intent' / 'neutral'
+
+
+@dataclass
+class ContactRecord:
+    handle: str
+    display_name: str
+    count: int
+
+
+@dataclass
 class Aggregated:
     duration: timedelta
     visit_count: int
     domain_counts: list[tuple[str, int]]
     top_pages: list[TopPage]
     searches: list[str]
-    category_seconds: dict[str, float]   # category → tab-seconds
+    category_seconds: dict[str, float]
     longest_domain: tuple[str, float] | None
     total_active_seconds: float
+    apps: list[AppRecord] = field(default_factory=list)
+    contacts: list[ContactRecord] = field(default_factory=list)
+    drift_seconds: float = 0.0
+    intent_seconds: float = 0.0
 
 
-def aggregate(session: Session, visits: Sequence[Visit]) -> Aggregated:
+def aggregate(session: Session, visits: Sequence[Visit],
+              apps: Sequence | None = None,
+              contacts: Sequence | None = None) -> Aggregated:
     domain_counter: Counter[str] = Counter()
     domain_duration: Counter[str] = Counter()
     url_counter: Counter[str] = Counter()
@@ -358,6 +389,36 @@ def aggregate(session: Session, visits: Sequence[Visit]) -> Aggregated:
                                          domain=dom, count=count)
     pages = sorted(title_groups.values(), key=lambda p: -p.count)[:10]
 
+    # Build app records with drift/intent kind
+    app_records: list[AppRecord] = []
+    for a in (apps or []):
+        # Filter very short noise (under 5s)
+        if a.duration_seconds < 5:
+            continue
+        app_records.append(AppRecord(
+            bundle_id=a.bundle_id, name=a.name,
+            duration_seconds=a.duration_seconds,
+            kind=app_kind(a.bundle_id),
+        ))
+    app_records.sort(key=lambda r: -r.duration_seconds)
+
+    contact_records: list[ContactRecord] = []
+    for c in (contacts or []):
+        contact_records.append(ContactRecord(
+            handle=c.handle, display_name=c.display_name, count=c.count,
+        ))
+
+    # DRIFT vs INTENT totals — combine web-categories and native-app time.
+    # Browsers are neutral apps (NEUTRAL_APPS) so we don't double-count.
+    drift_seconds = sum(
+        sec for cat, sec in category_seconds.items()
+        if web_category_kind(cat) == "drift"
+    ) + sum(r.duration_seconds for r in app_records if r.kind == "drift")
+    intent_seconds = sum(
+        sec for cat, sec in category_seconds.items()
+        if web_category_kind(cat) == "intent"
+    ) + sum(r.duration_seconds for r in app_records if r.kind == "intent")
+
     return Aggregated(
         duration=session.duration,
         visit_count=len(visits),
@@ -367,14 +428,22 @@ def aggregate(session: Session, visits: Sequence[Visit]) -> Aggregated:
         category_seconds=category_seconds,
         longest_domain=longest,
         total_active_seconds=total_active,
+        apps=app_records,
+        contacts=contact_records,
+        drift_seconds=drift_seconds,
+        intent_seconds=intent_seconds,
     )
 
 
 # ---- text rendering ----
 
-CATEGORY_ORDER_DISPLAY = ["SOCIAL", "MEDIA", "SHOPPING", "AI",
-                          "SCHOOL", "WORK", "EMAIL", "NEWS", "LIFE",
+# Display categories drift-first; AI between since it can swing either way
+# but is mostly intent now. SEARCH at the bottom — means-to-an-end.
+CATEGORY_ORDER_DISPLAY = ["SOCIAL", "MEDIA", "SHOPPING", "NEWS", "LIFE",
+                          "AI", "SCHOOL", "WORK", "EMAIL",
                           "SEARCH", "OTHER"]
+# Visual divider between drift and intent halves of the categories list
+DRIFT_LAST = "LIFE"  # last drift category in display order
 
 
 def render_text(session: Session, agg: Aggregated, cfg: dict,
@@ -413,7 +482,32 @@ def render_text(session: Session, agg: Aggregated, cfg: dict,
     lines.append(f"PAGES LOADED       {agg.visit_count:>{CHAR_WIDTH-19}}")
     lines.append("")
 
-    # Categories block — only show categories with > 30s of activity
+    # DRIFT vs INTENT — the dominant metric. No labels explaining; the
+    # contrast does the work.
+    if agg.drift_seconds > 0 or agg.intent_seconds > 0:
+        lines.append(f"DRIFT              {_hms(agg.drift_seconds):>{CHAR_WIDTH-19}}")
+        lines.append(f"INTENT             {_hms(agg.intent_seconds):>{CHAR_WIDTH-19}}")
+        lines.append("")
+
+    # APPS USED — non-browser native app time, drift first, then a soft
+    # divider, then intent. Browsers excluded (they're already in CATEGORIES).
+    drift_apps = [a for a in agg.apps if a.kind == "drift" and a.duration_seconds >= 30]
+    intent_apps = [a for a in agg.apps if a.kind == "intent" and a.duration_seconds >= 30]
+    if drift_apps or intent_apps:
+        lines.append("APPS USED")
+        for a in drift_apps[:8]:
+            label = f"  {_truncate(a.name, 28)}"
+            time_str = _hms(a.duration_seconds)
+            lines.append(label + time_str.rjust(CHAR_WIDTH - len(label)))
+        if drift_apps and intent_apps:
+            lines.append("  " + ("- " * 22))
+        for a in intent_apps[:8]:
+            label = f"  {_truncate(a.name, 28)}"
+            time_str = _hms(a.duration_seconds)
+            lines.append(label + time_str.rjust(CHAR_WIDTH - len(label)))
+        lines.append("")
+
+    # Categories block — drift first, then a soft divider, then intent.
     cats_to_show = [
         (k, agg.category_seconds.get(k, 0.0))
         for k in CATEGORY_ORDER_DISPLAY
@@ -421,7 +515,13 @@ def render_text(session: Session, agg: Aggregated, cfg: dict,
     ]
     if cats_to_show:
         lines.append("CATEGORIES")
+        # Inject a divider between drift and intent halves
+        last_kind = None
         for k, sec in cats_to_show:
+            kind = web_category_kind(k)
+            if last_kind == "drift" and kind != "drift":
+                lines.append("  " + ("- " * 22))
+            last_kind = kind
             label = f"  {k}"
             time_str = _hms(sec)
             lines.append(label + time_str.rjust(CHAR_WIDTH - len(label)))
@@ -447,9 +547,21 @@ def render_text(session: Session, agg: Aggregated, cfg: dict,
             lines.append(f"  + {len(agg.searches) - 8} more")
         lines.append("")
 
+    # TEXTED — outgoing messages by contact. Names from config; otherwise
+    # anonymized in contacts.py to last-4-digits format.
+    if agg.contacts:
+        lines.append("TEXTED")
+        for c in agg.contacts[:8]:
+            label = f"  {_truncate(c.display_name, 32)}"
+            count_str = f"x{c.count}"
+            lines.append(label + count_str.rjust(CHAR_WIDTH - len(label)))
+        if len(agg.contacts) > 8:
+            lines.append(f"  + {len(agg.contacts) - 8} others")
+        lines.append("")
+
     if agg.longest_domain:
         d, sec = agg.longest_domain
-        lines.append("LONGEST LOOK")
+        lines.append("BIGGEST TIME SINK")
         lines.append(f"  {_truncate(d, CHAR_WIDTH - 2)}")
         lines.append(f"  {_hms(sec):>{CHAR_WIDTH - 2}}")
         lines.append("")

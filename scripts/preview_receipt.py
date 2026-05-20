@@ -20,6 +20,8 @@ from src.receipt import (
     aggregate, generate_receipt_lines, render_png, render_text,
 )
 from src.sessions import Session, latest_session
+from src.screentime import read_app_usage
+from src.contacts import read_outgoing_by_contact
 
 
 def main() -> int:
@@ -46,14 +48,29 @@ def main() -> int:
 
     until = session.ended_at or datetime.now().astimezone()
     visits = read_visits(cfg["data_paths"]["chrome_history"], session.started_at, until)
+    apps = []
+    try:
+        apps = read_app_usage(session.started_at, until)
+    except Exception as e:
+        print(f"  app usage read failed: {type(e).__name__}: {e}")
+    contacts = []
+    try:
+        contacts = read_outgoing_by_contact(
+            session.started_at, until,
+            contact_map=cfg.get("contacts", {}),
+        )
+    except Exception as e:
+        print(f"  contacts read failed: {type(e).__name__}: {e}")
 
     print(f"Session: {label}")
     print(f"  {session.started_at.strftime('%Y-%m-%d %H:%M')}"
           f"  →  {until.strftime('%H:%M')}")
     print(f"  duration: {session.duration}")
     print(f"  visits:   {len(visits)}")
+    print(f"  apps:     {len(apps)}")
+    print(f"  contacts: {len(contacts)}")
 
-    agg = aggregate(session, visits)
+    agg = aggregate(session, visits, apps=apps, contacts=contacts)
     ai = generate_receipt_lines(agg, session.duration)
     if ai["headline"]:
         print(f"  headline:    {ai['headline']}")

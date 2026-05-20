@@ -33,5 +33,9 @@
     "blocked_domains": [],
     "blocked_keywords": [],
     "max_search_chars": 40
+  },
+  "contacts": {
+    "(555) 555-5555": "Mom",
+    "+15555550000": "Friend"
   }
 }

@@ -37,6 +37,8 @@ from src.receipt import (
 from src import sarah as sarah_mod
 from src.episode_receipt import generate_episode_title, render_episode_text
 from src.tracking_flag import is_active
+from src.screentime import read_app_usage
+from src.contacts import read_outgoing_by_contact
 
 
 LOG_PATH = REPO_ROOT / "data" / "events.log"
@@ -83,8 +85,21 @@ def cmd_sleep(cfg: dict) -> int:
     paths = cfg["data_paths"]
     visits = read_visits(paths["chrome_history"],
                          closed_session.started_at, closed_session.ended_at)
+    apps = []
+    try:
+        apps = read_app_usage(closed_session.started_at, closed_session.ended_at)
+    except Exception as e:
+        _log(f"[sleep] app usage read failed: {type(e).__name__}: {e}")
+    contacts = []
+    try:
+        contacts = read_outgoing_by_contact(
+            closed_session.started_at, closed_session.ended_at,
+            contact_map=cfg.get("contacts", {}),
+        )
+    except Exception as e:
+        _log(f"[sleep] contacts read failed: {type(e).__name__}: {e}")
 
-    agg = aggregate(closed_session, visits)
+    agg = aggregate(closed_session, visits, apps=apps, contacts=contacts)
     ai = generate_receipt_lines(agg, closed_session.duration)
     lines = render_text(closed_session, agg, cfg,
                         oneliner=ai["headline"], opportunity=ai["opportunity"])
@@ -237,9 +252,24 @@ def cmd_sarah_sample(cfg: dict) -> int:
 def cmd_now(cfg: dict) -> int:
     """Print a receipt for the current open session right now (no state change)."""
     session = sessions.latest_session()
+    until = datetime.now().astimezone()
     visits = read_visits(cfg["data_paths"]["chrome_history"],
-                         session.started_at, datetime.now().astimezone())
-    agg = aggregate(session, visits)
+                         session.started_at, until)
+    apps = []
+    try:
+        apps = read_app_usage(session.started_at, until)
+    except Exception as e:
+        _log(f"[now] app usage read failed: {type(e).__name__}: {e}")
+    contacts = []
+    try:
+        contacts = read_outgoing_by_contact(
+            session.started_at, until,
+            contact_map=cfg.get("contacts", {}),
+        )
+    except Exception as e:
+        _log(f"[now] contacts read failed: {type(e).__name__}: {e}")
+
+    agg = aggregate(session, visits, apps=apps, contacts=contacts)
     ai = generate_receipt_lines(agg, session.duration)
     lines = render_text(session, agg, cfg,
                         oneliner=ai["headline"], opportunity=ai["opportunity"])
