@@ -6,5 +6,5 @@ REPO="/Users/avitalmintz/Documents/New project/time-sink"
 
 [ -f "$HOME/.time-sink.env" ] && source "$HOME/.time-sink.env"
 
-exec /opt/anaconda3/bin/python3 "$REPO/scripts/print_session.py" wake \
+exec /opt/anaconda3/bin/python3.12 "$REPO/scripts/print_session.py" wake \
     >> "$REPO/data/sleephook.log" 2>&1

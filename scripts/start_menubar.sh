@@ -9,7 +9,7 @@ REPO="/Users/avitalmintz/Documents/New project/time-sink"
 pkill -f "scripts/menubar.py" 2>/dev/null
 
 # Launch detached so it survives the terminal closing
-nohup /opt/anaconda3/bin/python3 "$REPO/scripts/menubar.py" \
+nohup /opt/anaconda3/bin/python3.12 "$REPO/scripts/menubar.py" \
     >> "$REPO/data/menubar.log" 2>&1 &
 
 echo "menu bar app launched (PID $!)"
